@@ -19,14 +19,14 @@ admin_password: "AnsibleAdmin2026!"
 # Database Connection Credentials
 # Supported db_type: sqlite, mysql, postgresql
 db_type: "mysql"
-db_name: "dashboard"
+db_name: "db-name"
 db_host: "127.0.0.1"
 db_port: 3306
-db_user: "root"
-db_password: "password123"
+db_user: "your-db-username"
+db_password: "your-db-password"
 
 # Target Host Deployment Paths
-app_dir: "/var/www/html/mira"
+app_dir: "/var/www/html/ansibleDeployedWebApp"
 python_executable: "python3"
 app_user: "{{ ansible_user_id }}"
 app_group: "{{ ansible_user_id }}"
