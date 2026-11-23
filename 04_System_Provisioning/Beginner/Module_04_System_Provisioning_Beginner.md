@@ -295,12 +295,18 @@ Requirements for Running This Tutorial:
 
    2. Create [an inventory file](https://docs.ansible.com/ansible/2.9/user_guide/intro_inventory.html) with the group `my_hosts` and `localhost ansible_connection=local`, which tells Ansible to not use SSH, and just use the local connection. Additionally, you should explicitly set the `ansible_user` variable to the username to use when connecting to the server. Ansible has changed its behaviour over time regarding whether or not `ansible_user` is defined, and it is most effective to define it explicitly even when it can sometimes be inferred.
 
-      **Solution**: The file should look like:
+      <details>
+      <summary>Answers</summary>
 
-      ```ini
+      The file should look like:
+
+      ~~~ini
       [my_hosts]
       localhost ansible_connection=local ansible_user=ubuntu
-      ```
+      ~~~
+
+      </details>
+  
 
       <details>
       <summary>For your own infrastructure, do you connect as a different user? Password? SSH key?</summary>
@@ -332,7 +338,7 @@ Requirements for Running This Tutorial:
 
    </details>
 
-7. Create a `roles/my-role/files` folder, and within it a file named `test.txt`, containing the content "Hello, Galaxy 🚀"
+7. Create a `roles/my-role/files` folder, and within it a file named `test.txt`, containing the content "Hello, Admin 🚀"
 
 8. This is a complete role by itself and will copy the file `test.txt` from the `roles/my-role/files/` folder over to the target host and place it in `/tmp`.
 
@@ -347,7 +353,8 @@ Requirements for Running This Tutorial:
 
    **Question**: How does your file tree look now? Use `find` or `tree`.
 
-   **Solution**:
+   <details>
+   <summary>Answers</summary>
 
    ```
    .
@@ -360,6 +367,8 @@ Requirements for Running This Tutorial:
            └── tasks
                └── main.yml
    ```
+
+   </details>
 
 10. Run the playbook:
 
@@ -439,7 +448,8 @@ The [`setup`](https://docs.ansible.com/ansible/2.9/modules/setup_module.html) mo
    1. What variable stores the OS name?
    2. Where are all of the places that you can find your machine's IP (v4) addresses?
 
-   **Solution**:
+   <details>
+   <summary>Answers</summary>
 
    1. The OS name is stored in `ansible_distribution`. We saw `ansible_os_family` used above in the `ansible-cvmfs` role. You can use these variables if you are writing a generic role but packages or commands are named different on different operating systems.
    2. Ansible stores network information in quite a few places, sometimes one place is more convenient or more correct to use:
@@ -447,7 +457,7 @@ The [`setup`](https://docs.ansible.com/ansible/2.9/modules/setup_module.html) mo
       - `ansible_all_ipv4_addresses`
       - `ansible_default_ipv4.address`
       - `ansible_<interface_name>.ipv4`
-
+   </details>
 
 ##### Templates
 
@@ -624,8 +634,8 @@ Now that you've built a small role, you can imagine that building real roles tha
 3. Run the playbook
 
    **Question**: Did something go wrong?
-
-   **Solution**:
+   <details>
+   <summary>Answers</summary>
 
    Since you have been running the playbook as a non-root user (or at least you should have been!), the step to install a package fails.
    The solution to this is to set `become: true`.
@@ -635,13 +645,18 @@ Now that you've built a small role, you can imagine that building real roles tha
    2. Run the playbook again
 
    `become` causes Ansible to attempt to become a different user (using sudo/su/whatever is appropriate), by default this is `root`. If you want to become a different user, just set `become_user`. Beware, the user should be able to privilege escalate without a password prompt. Otherwise when you execute the playbook you should set `--ask-become-pass`, using the privilege escalation password for that host.
+   </details>
+
+</br>
 
    <details>
-   <summary>Ansible Become</summary>
+   <summary>Excursion: Ansible Become</summary>
 
    See the [documentation](https://docs.ansible.com/ansible/2.9/user_guide/become.html) if you need to control this behaviour differently. `become` can be set either at the task level or the playbook level.
 
    </details>
+
+</br>
 
    > **Tip: Should I use sudo or directly login as root?**
    > This is often site-specific policy. If your site doesn't have a dictated policy, then it's generally preferable to not allow direct login as root, and login as a separate user.
@@ -688,7 +703,8 @@ Now that you have a small role built up, you might start thinking about deployin
 
    **Question**: How does your file look? Is it readable? Run `cat secret_group_vars/all.yml`
 
-   **Solution**:
+   <details>
+   <summary>Answers</summary>
 
    The file will look like this, it is encrypted by Ansible Vault with AES256 encryption.
 
@@ -702,6 +718,8 @@ Now that you have a small role built up, you might start thinking about deployin
    34313765353766666330366632303836353863396430343264303032363739666139383830323565
    6133663637356331613062353834646561653366386665623930
    ```
+
+   </details>
 
 5. Use the new variable in our `.ini` file from earlier. Edit `roles/my-role/templates/test.ini.j2` and add the line `apikey = {{ apikey }}`
 
