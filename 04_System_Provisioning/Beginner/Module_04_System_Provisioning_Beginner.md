@@ -19,6 +19,13 @@ Downloads required:
 ## Overview
 In this module you will learn the basics of configuration as code. This concept helps you to keep your configuration structured, version controlled and reproducible in an event that requires redeployment.
 For this particular module we use Ansible, but there are other solutions like Puppet, Salt and Werewolf.
+
+You might ask why you need this, you might have bash scripts for installing things or simply have lists of packages and notes or small manuals how to configure them.
+While this might already be a help, it will still cost you a lot of time to recover from a server loss and reproducing the exact same setup might be very difficult.  
+As a motivation, you can imagine any of the following scenarios:
+- You need to migrate your currently deployed software stack to a new server, but how do you make sure you don't miss anything and the new setup is configured exactly like the old one?
+- A new colleague starts at your lab and asks you which software you use and how it is configured. You want to show the current state and when he or she makes their first steps, you would like to review what would be changed before the changes are applied to the live system.
+- Your boss walks in and asks you to track all changes from now on, because the lab prepares for a certification process.
 ## Objectives
 1. You get the idea of reproducible configuration as code and how it helps you scale software deployment and configuration as well.
 2. By using Ansible you will learn how to maintain an well-documented version controlled configuration and handle deployment secrets like passwords and keys.
