@@ -1,0 +1,38 @@
+# ==============================================================================
+# Nginx Virtual Host Configuration for {{ app_name }}
+# Managed by Ansible - Generated on {{ ansible_facts['date_time']['iso8601'] | default('Ansible Deploy Time') }}
+# ==============================================================================
+
+server {
+    listen {{ nginx_port | default(80) }};
+    server_name {{ nginx_server_name | default('_') }};
+
+    client_max_body_size 20M;
+
+    # Direct static asset serving by Nginx (fast caching & low Python overhead)
+    location /static/ {
+        alias {{ app_dir }}/static/;
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+        access_log off;
+    }
+
+    # Reverse proxy requests to Gunicorn WSGI server
+    location / {
+        proxy_pass http://127.0.0.1:{{ app_port }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+
+        # Proxy timeouts
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+
+    # Custom access and error logs
+    access_log /var/log/nginx/{{ app_name | lower | regex_replace('[^a-z0-9_]', '_') }}_access.log;
+    error_log /var/log/nginx/{{ app_name | lower | regex_replace('[^a-z0-9_]', '_') }}_error.log;
+}

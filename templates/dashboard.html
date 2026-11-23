@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard &bull; {{ app_name }}{% endblock %}
+
+{% block content %}
+<!-- Top Header & Deployment Banner -->
+<div class="row align-items-center mb-4">
+    <div class="col-md-7">
+        <h2 class="fw-bold mb-1 text-dark">
+            <i class="bi bi-graph-up-arrow text-primary me-2"></i>Executive Metrics &amp; Operations
+        </h2>
+        <p class="text-muted mb-0">Real-time overview of dummy ecommerce sales performance and user account activity.</p>
+    </div>
+    <div class="col-md-5 mt-3 mt-md-0 text-md-end">
+        <div class="d-inline-flex flex-wrap align-items-center gap-2">
+            <a href="{{ url_for('statistics') }}" target="_blank" class="btn btn-sm btn-info text-white rounded-pill px-3 shadow-sm" title="Opens live telemetry in a new window">
+                <i class="bi bi-cpu-fill me-1"></i>System &amp; DB Stats <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+            </a>
+            <div class="d-inline-flex align-items-center gap-2 bg-white border rounded-pill px-3 py-2 shadow-sm">
+                <span class="status-indicator-dot bg-success"></span>
+                <span class="small text-secondary">
+                    DB: <strong>{{ db_info.type }}</strong>
+                </span>
+                <button class="btn btn-sm btn-outline-secondary rounded-pill ms-1" onclick="location.reload()" title="Refresh Dashboard">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Cards Section -->
+<div class="row g-3 mb-4">
+    <!-- Total Revenue -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card stat-card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="text-muted small fw-semibold text-uppercase">Total Revenue</span>
+                    <div class="stat-icon-badge bg-primary-subtle text-primary">
+                        <i class="bi bi-currency-dollar"></i>
+                    </div>
+                </div>
+                <h3 class="fw-bold mb-1">${{ "{:,.2f}".format(kpis.total_revenue) }}</h3>
+                <div class="small text-success d-flex align-items-center gap-1">
+                    <i class="bi bi-arrow-up-right"></i>
+                    <span>+14.8% vs last week</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Orders -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card stat-card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="text-muted small fw-semibold text-uppercase">Total Orders</span>
+                    <div class="stat-icon-badge bg-success-subtle text-success">
+                        <i class="bi bi-bag-check"></i>
+                    </div>
+                </div>
+                <h3 class="fw-bold mb-1">{{ kpis.total_orders }}</h3>
+                <div class="small text-success d-flex align-items-center gap-1">
+                    <i class="bi bi-arrow-up-right"></i>
+                    <span>+8.2% new transactions</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active User Accounts -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card stat-card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="text-muted small fw-semibold text-uppercase">User Accounts</span>
+                    <div class="stat-icon-badge bg-info-subtle text-info">
+                        <i class="bi bi-people"></i>
+                    </div>
+                </div>
+                <h3 class="fw-bold mb-1">{{ kpis.active_users }} <span class="fs-6 fw-normal text-muted">/ {{ kpis.total_users }} total</span></h3>
+                <div class="small text-info d-flex align-items-center gap-1">
+                    <i class="bi bi-check-circle"></i>
+                    <span>{{ "{:.0f}".format((kpis.active_users / kpis.total_users) * 100) }}% Active status</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Avg Order Value & Conversion -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card stat-card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="text-muted small fw-semibold text-uppercase">Avg Order / Conv.</span>
+                    <div class="stat-icon-badge bg-warning-subtle text-warning">
+                        <i class="bi bi-pie-chart"></i>
+                    </div>
+                </div>
+                <h3 class="fw-bold mb-1">${{ "{:,.2f}".format(kpis.avg_order_value) }}</h3>
+                <div class="small text-secondary d-flex align-items-center gap-1">
+                    <i class="bi bi-bullseye text-primary"></i>
+                    <span>Conv. Rate: <strong>{{ kpis.conversion_rate }}%</strong></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row g-3 mb-4">
+    <!-- Revenue & Sales Trend Line/Bar -->
+    <div class="col-12 col-lg-8">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-graph-up me-2 text-primary"></i>7-Day Revenue &amp; Order Volume
+                </h6>
+                <span class="badge bg-light text-dark border">Daily Sampled</span>
+            </div>
+            <div class="card-body">
+                <div style="height: 280px; position: relative;">
+                    <canvas id="revenueTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Sales Breakdown Doughnut -->
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-pie-chart-fill me-2 text-primary"></i>Sales by Category
+                </h6>
+            </div>
+            <div class="card-body d-flex flex-column justify-content-center">
+                <div style="height: 240px; position: relative;">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tables Section: Recent Orders & Users -->
+<div class="row g-3 mb-4">
+    <!-- Recent Ecommerce Orders -->
+    <div class="col-12 col-xl-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-cart3 me-2 text-primary"></i>Recent Ecommerce Orders
+                </h6>
+                <a href="{{ url_for('api_metrics') }}" target="_blank" class="btn btn-sm btn-light border text-secondary">
+                    <i class="bi bi-code-slash me-1"></i>JSON API
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small text-secondary">
+                            <tr>
+                                <th class="ps-3">Order</th>
+                                <th>Customer</th>
+                                <th>Amount</th>
+                                <th>Payment</th>
+                                <th>Status</th>
+                                <th class="pe-3">Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in recent_orders %}
+                            <tr>
+                                <td class="ps-3 fw-semibold text-primary font-monospace small">{{ order.order_number }}</td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ order.customer_name }}</div>
+                                    <div class="text-muted small" style="font-size: 0.75rem;">{{ order.customer_email }}</div>
+                                </td>
+                                <td class="fw-bold">${{ "{:,.2f}".format(order.total_amount) }}</td>
+                                <td>
+                                    <span class="badge bg-light text-dark border font-monospace small">
+                                        {{ order.payment_method }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if order.status == 'Delivered' %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">Delivered</span>
+                                    {% elif order.status == 'Shipped' %}
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">Shipped</span>
+                                    {% elif order.status == 'Processing' %}
+                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1">Processing</span>
+                                    {% elif order.status == 'Refunded' %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">Refunded</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ order.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="pe-3 small text-muted">{{ order.created_at }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dummy User Accounts -->
+    <div class="col-12 col-xl-5">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-people-fill me-2 text-primary"></i>User Accounts &amp; Activity
+                </h6>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{{ url_for('users_create') }}" class="btn btn-sm btn-outline-primary" title="Add New User">
+                        <i class="bi bi-person-plus-fill me-1"></i>Add User
+                    </a>
+                    <a href="{{ url_for('users_list') }}" class="btn btn-sm btn-light border text-secondary" title="View & Manage All Users">
+                        Manage All
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small text-secondary">
+                            <tr>
+                                <th class="ps-3">User</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Spent</th>
+                                <th class="pe-3">Origin</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for u in recent_users %}
+                            <tr>
+                                <td class="ps-3">
+                                    <div class="fw-semibold text-dark">{{ u.name }}</div>
+                                    <div class="text-muted small" style="font-size: 0.75rem;">{{ u.email }}</div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-dark-subtle text-dark border small">{{ u.role }}</span>
+                                </td>
+                                <td>
+                                    {% if u.status == 'Active' %}
+                                        <span class="badge bg-success-subtle text-success px-2 py-1">Active</span>
+                                    {% elif u.status == 'Pending' %}
+                                        <span class="badge bg-warning-subtle text-warning px-2 py-1">Pending</span>
+                                    {% elif u.status == 'Suspended' %}
+                                        <span class="badge bg-danger-subtle text-danger px-2 py-1">Suspended</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ u.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="fw-bold small">${{ "{:,.2f}".format(u.total_spent) }}</td>
+                                <td class="pe-3 small text-muted">{{ u.country }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Products Row -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-award-fill me-2 text-primary"></i>Top Performing Catalog Products
+                </h6>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{{ url_for('items_create') }}" class="btn btn-sm btn-outline-primary" title="Add New Item">
+                        <i class="bi bi-plus-circle-fill me-1"></i>Add Item
+                    </a>
+                    <a href="{{ url_for('items_list') }}" class="btn btn-sm btn-light border text-secondary" title="View & Manage All Catalog Items">
+                        Manage Catalog
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small text-secondary">
+                            <tr>
+                                <th class="ps-3">SKU</th>
+                                <th>Product Title</th>
+                                <th>Category</th>
+                                <th>Price</th>
+                                <th>Inventory</th>
+                                <th>Units Sold</th>
+                                <th class="pe-3">Rating</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in top_products %}
+                            <tr>
+                                <td class="ps-3 font-monospace small fw-bold text-secondary">{{ p.sku }}</td>
+                                <td class="fw-semibold text-dark">{{ p.name }}</td>
+                                <td><span class="badge bg-info-subtle text-info border small">{{ p.category }}</span></td>
+                                <td class="fw-bold">${{ "{:,.2f}".format(p.price) }}</td>
+                                <td>
+                                    {% if p.stock < 20 %}
+                                        <span class="badge bg-danger-subtle text-danger">Low ({{ p.stock }})</span>
+                                    {% else %}
+                                        <span class="badge bg-light text-secondary border">{{ p.stock }} units</span>
+                                    {% endif %}
+                                </td>
+                                <td class="fw-semibold">{{ p.sales_count }} sold</td>
+                                <td class="pe-3 text-warning">
+                                    <i class="bi bi-star-fill me-1"></i><span class="text-dark small fw-bold">{{ p.rating }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Deployment & Environment Information Banner -->
+<div class="card border-primary-subtle bg-light shadow-sm">
+    <div class="card-body py-3">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h6 class="fw-bold text-primary mb-1">
+                    <i class="bi bi-cpu-fill me-2"></i>Ansible Deployment &amp; Environment Details
+                </h6>
+                <div class="small text-secondary">
+                    Configured from <code>.env</code> file: 
+                    DB Type = <strong>{{ db_info.type }}</strong> &bull; 
+                    DB Host = <strong>{{ db_info.host }}:{{ db_info.port }}</strong> &bull; 
+                    DB User = <strong>{{ db_info.user }}</strong> &bull; 
+                    App Title = <strong>{{ app_name }}</strong>
+                </div>
+            </div>
+            <div class="col-md-5 text-md-end mt-2 mt-md-0 d-flex flex-wrap justify-content-md-end gap-2 align-items-center">
+                <a href="{{ url_for('statistics') }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Open CPU and Database statistics in a separate window">
+                    <i class="bi bi-cpu me-1"></i>Open Stats Window <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                </a>
+                <form action="{{ url_for('database_seed') }}" method="POST" class="d-inline m-0">
+                    <input type="hidden" name="scale" value="standard">
+                    <button type="submit" class="btn btn-sm btn-outline-success" title="Re-seeds the database with fresh dummy data">
+                        <i class="bi bi-arrow-repeat me-1"></i>Re-Seed Database
+                    </button>
+                </form>
+                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-2">
+                    <i class="bi bi-check2-all me-1"></i>Ansible Managed .env
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Embedded chart data from Flask backend
+    const chartDates = {{ charts.dates | tojson }};
+    const chartRevenue = {{ charts.revenue | tojson }};
+    const chartOrders = {{ charts.orders | tojson }};
+    const catLabels = {{ charts.categories | tojson }};
+    const catSales = {{ charts.category_sales | tojson }};
+
+    // 1. Revenue & Orders Trend Chart
+    const ctxTrend = document.getElementById('revenueTrendChart').getContext('2d');
+    new Chart(ctxTrend, {
+        type: 'line',
+        data: {
+            labels: chartDates,
+            datasets: [
+                {
+                    label: 'Revenue ($)',
+                    data: chartRevenue,
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.12)',
+                    fill: true,
+                    tension: 0.35,
+                    borderWidth: 2.5,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Orders Count',
+                    data: chartOrders,
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    borderDash: [4, 4],
+                    tension: 0.2,
+                    borderWidth: 2,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    ticks: {
+                        callback: function(value) { return '$' + value.toLocaleString(); }
+                    },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: {
+                        stepSize: 10
+                    }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { position: 'top' }
+            }
+        }
+    });
+
+    // 2. Sales by Category Doughnut Chart
+    const ctxCat = document.getElementById('categoryChart').getContext('2d');
+    new Chart(ctxCat, {
+        type: 'doughnut',
+        data: {
+            labels: catLabels,
+            datasets: [{
+                data: catSales,
+                backgroundColor: [
+                    '#0d6efd',
+                    '#20c997',
+                    '#ffc107',
+                    '#fd7e14',
+                    '#6f42c1',
+                    '#0dcaf0'
+                ],
+                borderWidth: 2,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 12, font: { size: 11 } }
+                }
+            },
+            cutout: '65%'
+        }
+    });
+</script>
+{% endblock %}
