@@ -65,7 +65,7 @@ mysql_socket: ""
 # Target Host & Application Deployment
 # ==============================================================================
 
-app_dir: "/var/www/html/mira"
+app_dir: "/home/almalinux/ansible-dummy-web-app"
 
 python_executable: "python3"
 app_user: "{{ ansible_user_id }}"
