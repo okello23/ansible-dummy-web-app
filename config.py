@@ -31,6 +31,7 @@ class Config:
     DB_PORT = os.getenv("DB_PORT", "5432")
     DB_USER = os.getenv("DB_USER", "ecommerce_user")
     DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+    DB_SOCKET = os.getenv("DB_SOCKET", "")
 
     # SQLite database file path
     SQLITE_PATH = BASE_DIR / DB_NAME

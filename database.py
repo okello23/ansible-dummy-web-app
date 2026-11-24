@@ -44,14 +44,23 @@ class DatabaseConnection:
                 # If creating db fails, we proceed and attempt direct connection
                 pass
 
+            server_conn = pymysql.connect(
+                host=Config.DB_HOST,
+                user=Config.DB_USER,
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True,
+                unix_socket=Config.DB_SOCKET
+            )
+            with server_conn.cursor() as cur:
+                cur.execute(f"CREATE DATABASE IF NOT EXISTS `{Config.DB_NAME}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+            server_conn.close()
             self.conn = pymysql.connect(
                 host=Config.DB_HOST,
-                port=int(Config.DB_PORT),
                 user=Config.DB_USER,
-                password=Config.DB_PASSWORD,
                 database=Config.DB_NAME,
                 cursorclass=pymysql.cursors.DictCursor,
-                autocommit=True
+                autocommit=True,
+                unix_socket=Config.DB_SOCKET
             )
         else:
             self.conn = sqlite3.connect(Config.SQLITE_PATH, timeout=10.0)
