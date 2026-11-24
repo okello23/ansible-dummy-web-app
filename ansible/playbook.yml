@@ -2,13 +2,116 @@
 ---
 - name: Deploy and Configure Python Dashboard Web Application
   hosts: webservers
-  gather_facts: yes
+  # Bootstrap Python before gathering facts so this also works on minimal hosts.
+  gather_facts: false
 
   vars_files:
     - group_vars/all.yml
     - group_vars/vault.yml
 
   tasks:
+
+    # ========================================================================
+    # Bootstrap Python (Ansible needs Python for most modules)
+    # ========================================================================
+
+    - name: Check for Python 3 and install it when missing
+      ansible.builtin.raw: |
+        if command -v python3 >/dev/null 2>&1; then
+          echo PYTHON3_ALREADY_PRESENT
+          exit 0
+        fi
+        . /etc/os-release
+        case "${ID}" in
+          ubuntu|debian|linuxmint|pop)
+            apt-get update && apt-get install -y python3
+            ;;
+          fedora|rhel|centos|rocky|almalinux)
+            if command -v dnf >/dev/null 2>&1; then
+              dnf install -y python3
+            else
+              yum install -y python3
+            fi
+            ;;
+          *)
+            echo "Unsupported OS for automatic Python bootstrap: ${ID}" >&2
+            exit 1
+            ;;
+        esac
+      become: true
+      register: python_bootstrap
+      changed_when: "'PYTHON3_ALREADY_PRESENT' not in python_bootstrap.stdout"
+
+    - name: Gather facts after Python is available
+      ansible.builtin.setup:
+
+    # ========================================================================
+    # Install required system packages when absent (idempotent)
+    # ========================================================================
+
+    - name: Select OS-specific package and service names
+      ansible.builtin.set_fact:
+        python_system_packages: >-
+          {{ ['python3', 'python3-venv', 'python3-pip']
+             if ansible_os_family == 'Debian'
+             else ['python3', 'python3-pip'] }}
+        mysql_server_packages: >-
+          {{ ['mysql-server', 'mysql-client', 'python3-pymysql']
+             if ansible_os_family == 'Debian'
+             else ['community-mysql-server', 'community-mysql', 'python3-PyMySQL'] }}
+        mysql_service_name: "{{ 'mysql' if ansible_os_family == 'Debian' else 'mysqld' }}"
+
+    - name: Refresh APT package index on Debian-family systems
+      become: true
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure Python, pip and virtual-environment support are installed
+      become: true
+      ansible.builtin.package:
+        name: "{{ python_system_packages }}"
+        state: present
+
+    - name: Ensure Nginx is installed when enabled
+      become: true
+      ansible.builtin.package:
+        name: nginx
+        state: present
+      when: manage_nginx | default(false) | bool
+
+    - name: Ensure MySQL server, client and Python driver are installed
+      become: true
+      ansible.builtin.package:
+        name: "{{ mysql_server_packages }}"
+        state: present
+      when: db_type | lower == 'mysql'
+
+    - name: Detect systemd runtime
+      ansible.builtin.stat:
+        path: /run/systemd/system
+      register: systemd_runtime
+
+    - name: Start and enable MySQL when systemd is available
+      become: true
+      ansible.builtin.service:
+        name: "{{ mysql_service_name }}"
+        state: started
+        enabled: true
+      when:
+        - db_type | lower == 'mysql'
+        - systemd_runtime.stat.exists
+
+    - name: Explain manual MySQL startup when systemd is unavailable
+      ansible.builtin.debug:
+        msg: >-
+          MySQL packages are installed, but systemd is unavailable.
+          Start the MySQL daemon using the method supported by this container
+          before running database initialization.
+      when:
+        - db_type | lower == 'mysql'
+        - not systemd_runtime.stat.exists
 
     # ========================================================================
     # Deployment Information
@@ -64,7 +167,7 @@
       changed_when: "'Successfully installed' in pip_install_result.stdout"
 
     # ========================================================================
-    # Database Initialization
+    # Database Initialization (MySQL server is installed above; this calls app code)
     # ========================================================================
 
     - name: Initialize database and seed dummy data
@@ -78,11 +181,6 @@
     # ========================================================================
     # Systemd Detection
     # ========================================================================
-
-    - name: Detect systemd runtime
-      ansible.builtin.stat:
-        path: /run/systemd/system
-      register: systemd_runtime
 
     - name: Display service manager detection
       ansible.builtin.debug:
@@ -150,11 +248,6 @@
       become: true
       when: manage_nginx | default(false) | bool
       block:
-
-        - name: Ensure Nginx package is installed
-          ansible.builtin.package:
-            name: nginx
-            state: present
 
         - name: Detect Debian-style Nginx configuration layout
           ansible.builtin.stat:
