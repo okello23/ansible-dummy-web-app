@@ -365,7 +365,7 @@
   handlers:
 
     - name: Reload Application Service
-      ansible.builtin.systemd_service:
+      ansible.builtin.service:
         name: "{{ systemd_service_name }}"
         state: restarted
       become: true
