@@ -1,12 +1,19 @@
+
 ---
 - name: Deploy and Configure Python Dashboard Web Application
   hosts: webservers
   gather_facts: yes
+
   vars_files:
     - group_vars/all.yml
     - group_vars/vault.yml
 
   tasks:
+
+    # ========================================================================
+    # Deployment Information
+    # ========================================================================
+
     - name: Display Deployment Target Information
       ansible.builtin.debug:
         msg:
@@ -14,9 +21,13 @@
           - "Environment: {{ app_env }}"
           - "Target Directory: {{ app_dir }}"
           - "Configured DB Engine: {{ db_type }}"
-         # - "Configured DB User: {{ db_user }}"
           - "Port: {{ app_port }}"
           - "Manage Nginx: {{ manage_nginx | default(false) }}"
+          - "Manage Systemd: {{ manage_systemd_service | default(false) }}"
+
+    # ========================================================================
+    # Application Directory
+    # ========================================================================
 
     - name: Ensure target application directory exists
       ansible.builtin.file:
@@ -24,13 +35,22 @@
         state: directory
         mode: '0755'
 
+    # ========================================================================
+    # Environment Configuration
+    # ========================================================================
+
     - name: Deploy and customize .env configuration file
       ansible.builtin.template:
         src: templates/env.j2
         dest: "{{ app_dir }}/.env"
         mode: '0600'
         unsafe_writes: yes
+      no_log: true
       notify: Reload Application Service
+
+    # ========================================================================
+    # Python Environment
+    # ========================================================================
 
     - name: Ensure Python virtual environment exists
       ansible.builtin.command:
@@ -43,50 +63,113 @@
       register: pip_install_result
       changed_when: "'Successfully installed' in pip_install_result.stdout"
 
+    # ========================================================================
+    # Database Initialization
+    # ========================================================================
+
     - name: Initialize database and seed dummy data
       ansible.builtin.command:
         cmd: "{{ app_dir }}/.venv/bin/python3 -c 'from database import init_db; init_db()'"
         chdir: "{{ app_dir }}"
       register: db_init_result
       changed_when: false
+      when: run_db_init | default(true) | bool
 
-    - name: Configure systemd service (if enabled)
-      when: manage_systemd_service | default(false)
-      become: yes
+    # ========================================================================
+    # Systemd Detection
+    # ========================================================================
+
+    - name: Detect systemd runtime
+      ansible.builtin.stat:
+        path: /run/systemd/system
+      register: systemd_runtime
+
+    - name: Display service manager detection
+      ansible.builtin.debug:
+        msg: >-
+          Systemd runtime detected: {{ systemd_runtime.stat.exists }}.
+          {% if systemd_runtime.stat.exists %}
+          Application will be managed through systemd.
+          {% else %}
+          Systemd is unavailable. Skipping systemd service management.
+          {% endif %}
+
+    # ========================================================================
+    # Systemd Service Configuration
+    # ========================================================================
+
+    - name: Configure systemd service
+      become: true
+      when:
+        - manage_systemd_service | default(false) | bool
+        - systemd_runtime.stat.exists
       block:
+
+        - name: Ensure systemd service directory exists
+          ansible.builtin.file:
+            path: /etc/systemd/system
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+
         - name: Deploy systemd unit file
           ansible.builtin.template:
             src: templates/webapp.service.j2
             dest: "/etc/systemd/system/{{ systemd_service_name }}.service"
+            owner: root
+            group: root
             mode: '0644'
-            unsafe_writes: yes
+          notify: Reload Application Service
 
         - name: Reload systemd daemon
-          ansible.builtin.systemd:
-            daemon_reload: yes
+          ansible.builtin.systemd_service:
+            daemon_reload: true
 
-        - name: Ensure service is enabled and running
-          ansible.builtin.systemd:
+        - name: Ensure application service is enabled and running
+          ansible.builtin.systemd_service:
             name: "{{ systemd_service_name }}"
             state: restarted
-            enabled: yes
+            enabled: true
 
-    - name: Configure Nginx reverse proxy (if enabled)
-      when: manage_nginx | default(false)
-      become: yes
+    - name: Skip systemd service management when unavailable
+      ansible.builtin.debug:
+        msg: >-
+          Systemd is unavailable. The application service was not installed
+          or started. Use Gunicorn manually in this environment.
+      when:
+        - manage_systemd_service | default(false) | bool
+        - not systemd_runtime.stat.exists
+
+    # ========================================================================
+    # Nginx Configuration
+    # ========================================================================
+
+    - name: Configure Nginx reverse proxy
+      become: true
+      when: manage_nginx | default(false) | bool
       block:
+
         - name: Ensure Nginx package is installed
-          ansible.builtin.apt:
+          ansible.builtin.package:
             name: nginx
             state: present
-            update_cache: yes
+
+        - name: Detect Nginx configuration layout
+          ansible.builtin.stat:
+            path: /etc/nginx/sites-available
+          register: nginx_sites_available
 
         - name: Deploy Nginx virtual host configuration
           ansible.builtin.template:
             src: templates/nginx.conf.j2
-            dest: "/etc/nginx/sites-available/{{ nginx_site_config_name }}"
+            dest: >-
+              {% if nginx_sites_available.stat.exists %}
+              /etc/nginx/sites-available/{{ nginx_site_config_name }}
+              {% else %}
+              /etc/nginx/conf.d/{{ nginx_site_config_name }}.conf
+              {% endif %}
             mode: '0644'
-            unsafe_writes: yes
           notify: Reload Nginx
 
         - name: Enable Nginx site configuration
@@ -94,65 +177,92 @@
             src: "/etc/nginx/sites-available/{{ nginx_site_config_name }}"
             dest: "/etc/nginx/sites-enabled/{{ nginx_site_config_name }}"
             state: link
+          when: nginx_sites_available.stat.exists
 
         - name: Remove default Nginx welcome site if present
           ansible.builtin.file:
             path: /etc/nginx/sites-enabled/default
             state: absent
+          when: nginx_sites_available.stat.exists
 
         - name: Verify Nginx syntax configuration
-          ansible.builtin.command: nginx -t
+          ansible.builtin.command:
+            cmd: nginx -t
           changed_when: false
 
-        - name: Ensure Nginx service is running and enabled
+        - name: Start Nginx when systemd is available
           ansible.builtin.service:
             name: nginx
             state: started
-            enabled: yes
+            enabled: true
+          when: systemd_runtime.stat.exists
+
+        - name: Report Nginx configuration in container
+          ansible.builtin.debug:
+            msg: "Nginx configuration installed and validated. Start Nginx manually in this container."
+          when: not systemd_runtime.stat.exists
+
+    # ========================================================================
+    # Application Health Check
+    # ========================================================================
 
     - name: Run verification test on application configuration
       ansible.builtin.command:
-        cmd: "{{ app_dir }}/.venv/bin/python3 -c 'from app import app; client = app.test_client(); res = client.get(\"/health\"); assert res.status_code == 200; print(res.get_json())'"
+        cmd: >-
+          {{ app_dir }}/.venv/bin/python3 -c
+          'from app import app;
+          client = app.test_client();
+          res = client.get("/health");
+          assert res.status_code == 200, res.get_data(as_text=True);
+          print(res.get_json())'
         chdir: "{{ app_dir }}"
       register: app_health_check
       changed_when: false
+      when: run_health_check | default(true) | bool
 
-    - name: Display Application Health & Credentials Summary
+    # ========================================================================
+    # Deployment Summary
+    # ========================================================================
+
+    - name: Display Application Deployment Summary
       ansible.builtin.debug:
         msg:
           - "=========================================================="
-          - " APPLICATION DEPLOYED & CONFIGURED SUCCESSFULLY"
+          - " APPLICATION DEPLOYMENT COMPLETED"
           - "=========================================================="
-          - "App Name:         {{ app_name }}"
-          - "Environment:      {{ app_env }}"
+          - "App Name:          {{ app_name }}"
+          - "Environment:       {{ app_env }}"
+          - "Application Dir:   {{ app_dir }}"
           - "Dashboard URL:     http://localhost:{{ app_port }}/dashboard"
           - "Stats Window URL:  http://localhost:{{ app_port }}/statistics"
-          - "Nginx Enabled:    {{ manage_nginx | default(false) }}"
-          - "Nginx URL:        http://{{ nginx_server_name | default('localhost') }}:{{ nginx_port | default(80) }}/"
-          - "Health Status:    {{ app_health_check.stdout }}"
-          - "Admin Username:   {{ admin_username }}"
-          - "Admin Password:   {{ admin_password }}"
-          - "Database Type:    {{ db_type }}"
-          - "Database User:    {{ db_user }}"
-          - "Database Name:    {{ db_name }}"
+          - "Nginx Enabled:     {{ manage_nginx | default(false) }}"
+          - "Systemd Available: {{ systemd_runtime.stat.exists }}"
+          - "Systemd Enabled:   {{ manage_systemd_service | default(false) }}"
+          - "Nginx URL:         http://{{ nginx_server_name | default('localhost') }}:{{ nginx_port | default(80) }}/"
+          - "Health Status:     {{ app_health_check.stdout | default('Not executed') }}"
+          - "Admin Username:    {{ admin_username }}"
+          - "Database Type:     {{ db_type }}"
+          - "Database Name:     {{ db_name }}"
           - "=========================================================="
 
+  # ==========================================================================
+  # Handlers
+  # ==========================================================================
+
   handlers:
+
     - name: Reload Application Service
-      ansible.builtin.debug:
-        msg: "Configuration updated in .env. Service reload triggered."
+      ansible.builtin.systemd_service:
+        name: "{{ systemd_service_name }}"
+        state: restarted
+      become: true
+      when:
+        - manage_systemd_service | default(false) | bool
+        - systemd_runtime.stat.exists | default(false)
 
     - name: Reload Nginx
       ansible.builtin.service:
         name: nginx
         state: reloaded
-      when: manage_nginx | default(false)
-      become: yes
-
-    - name: Reload Nginx
-      ansible.builtin.service:
-        name: nginx
-        state: reloaded
-      when: manage_nginx | default(false)
-      become: yes
-
+      become: true
+      when: systemd_runtime.stat.exists | default(false)
