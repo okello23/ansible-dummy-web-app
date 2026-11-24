@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+
+{% block title %}System &bull; Database &bull; CPU Telemetry &bull; {{ app_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .telemetry-card {
+        border-radius: 12px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .pulse-live-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        background-color: #198754;
+        border-radius: 50%;
+        box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7);
+        animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
+        70% { transform: scale(1.1); box-shadow: 0 0 0 7px rgba(25, 135, 84, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
+    }
+    .metric-value-large {
+        font-size: 2.25rem;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+    .cpu-core-bar {
+        height: 10px;
+        border-radius: 6px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Top Header & Controls -->
+<div class="row align-items-center mb-4">
+    <div class="col-lg-7">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="pulse-live-indicator"></span>
+            <span class="badge bg-dark text-uppercase small font-monospace">Live Telemetry Monitor</span>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle small">Separate Window</span>
+        </div>
+        <h2 class="fw-bold mb-0 text-dark">
+            <i class="bi bi-cpu text-info me-2"></i>Database &amp; CPU Infrastructure Statistics
+        </h2>
+        <p class="text-muted small mb-0">Real-time telemetric stream showing dummy database performance, storage, and CPU core utilization.</p>
+    </div>
+    <div class="col-lg-5 mt-3 mt-lg-0 text-lg-end">
+        <div class="d-inline-flex align-items-center gap-2 bg-white border p-2 rounded-pill shadow-sm">
+            <div class="form-check form-switch m-0 ps-5 small">
+                <input class="form-check-input" type="checkbox" id="autoRefreshToggle" checked>
+                <label class="form-check-label fw-semibold text-secondary" for="autoRefreshToggle">Live Polling (3s)</label>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary rounded-pill" onclick="fetchLiveStats()" title="Refresh now">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                <i class="bi bi-speedometer2 me-1"></i>Main Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- SECTION 1: DATABASE ENGINE STATISTICS & SEEDING -->
+<!-- ========================================================================= -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0 telemetry-card">
+            <div class="card-header bg-white border-bottom py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="stat-icon-badge bg-primary-subtle text-primary">
+                        <i class="bi bi-database-fill-check"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold mb-0 text-dark">Database Connection &amp; Performance Telemetry</h5>
+                        <span class="small text-muted">Configured Engine: <strong>{{ db_info.type }}</strong> &bull; Database: <code>{{ db_info.name }}</code></span>
+                    </div>
+                </div>
+
+                <!-- Database Seeding Trigger Buttons -->
+                <div class="d-flex align-items-center gap-2">
+                    <form action="{{ url_for('database_seed') }}" method="POST" class="d-inline">
+                        <input type="hidden" name="scale" value="standard">
+                        <button type="submit" class="btn btn-sm btn-success rounded-pill px-3 shadow-sm" title="Populates standard dataset">
+                            <i class="bi bi-cloud-arrow-down-fill me-1"></i>Seed Data (Standard)
+                        </button>
+                    </form>
+                    <form action="{{ url_for('database_seed') }}" method="POST" class="d-inline">
+                        <input type="hidden" name="scale" value="large">
+                        <button type="submit" class="btn btn-sm btn-outline-success rounded-pill px-3" title="Populates large volume dataset">
+                            <i class="bi bi-database-fill-add me-1"></i>Seed Data (Large)
+                        </button>
+                    </form>
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2" onclick="testConnection()" title="Ping Database">
+                        <i class="bi bi-activity"></i> Ping
+                    </button>
+                </div>
+            </div>
+
+            <div class="card-body">
+                <!-- Database KPI Badges -->
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-3">
+                        <div class="p-3 bg-light rounded-3 border">
+                            <div class="text-muted small fw-semibold text-uppercase">Connection Status</div>
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle fs-6" id="dbStatusBadge">
+                                    <i class="bi bi-check2-circle me-1"></i>CONNECTED
+                                </span>
+                            </div>
+                            <div class="small text-secondary mt-1">Latency: <strong id="dbLatency">{{ stats.database.connection.latency_ms }} ms</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="col-6 col-md-3">
+                        <div class="p-3 bg-light rounded-3 border">
+                            <div class="text-muted small fw-semibold text-uppercase">Query Throughput</div>
+                            <div class="metric-value-large text-primary mt-1" id="dbQps">
+                                {{ stats.database.telemetry.qps }} <span class="fs-6 fw-normal text-muted">QPS</span>
+                            </div>
+                            <div class="small text-secondary">Cache Hit Ratio: <strong id="dbCacheHit">{{ stats.database.telemetry.cache_hit_ratio }}%</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="col-6 col-md-3">
+                        <div class="p-3 bg-light rounded-3 border">
+                            <div class="text-muted small fw-semibold text-uppercase">Active Pool Connections</div>
+                            <div class="metric-value-large text-dark mt-1" id="dbConnCount">
+                                {{ stats.database.telemetry.active_connections }} <span class="fs-6 fw-normal text-muted">/ {{ stats.database.telemetry.max_connections }}</span>
+                            </div>
+                            <div class="small text-secondary">Pool Usage: <strong id="dbConnPct">{{ stats.database.telemetry.connection_pool_usage_pct }}%</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="col-6 col-md-3">
+                        <div class="p-3 bg-light rounded-3 border">
+                            <div class="text-muted small fw-semibold text-uppercase">Database Disk Size</div>
+                            <div class="metric-value-large text-dark mt-1" id="dbFileSize">
+                                {{ stats.database.size_kb }} <span class="fs-6 fw-normal text-muted">KB</span>
+                            </div>
+                            <div class="small text-secondary">Total Records: <strong id="dbTotalRecords">{{ stats.database.total_records }}</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Database Table Breakdown Cards -->
+                <div class="row g-2 text-center">
+                    <div class="col-6 col-sm-3 col-md">
+                        <div class="border rounded p-2 bg-white">
+                            <div class="text-muted small"><code>users</code> table</div>
+                            <h5 class="fw-bold text-dark mb-0" id="cntUsers">{{ stats.database.tables.users }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md">
+                        <div class="border rounded p-2 bg-white">
+                            <div class="text-muted small"><code>orders</code> table</div>
+                            <h5 class="fw-bold text-dark mb-0" id="cntOrders">{{ stats.database.tables.orders }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md">
+                        <div class="border rounded p-2 bg-white">
+                            <div class="text-muted small"><code>products</code> table</div>
+                            <h5 class="fw-bold text-dark mb-0" id="cntProducts">{{ stats.database.tables.products }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md">
+                        <div class="border rounded p-2 bg-white">
+                            <div class="text-muted small"><code>revenue_trends</code></div>
+                            <h5 class="fw-bold text-dark mb-0" id="cntTrends">{{ stats.database.tables.revenue_trends }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-12 col-md">
+                        <div class="border rounded p-2 bg-white">
+                            <div class="text-muted small">Last Database Event</div>
+                            <div class="small text-truncate fw-semibold text-secondary" id="lastEventDesc">
+                                {{ stats.database.last_event.description }} ({{ stats.database.last_event.created_at }})
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- SECTION 2: DUMMY CPU & COMPUTE NODE UTILIZATION -->
+<!-- ========================================================================= -->
+<div class="row g-3 mb-4">
+    <!-- Overall CPU Gauge & Core Breakdown -->
+    <div class="col-12 col-lg-5">
+        <div class="card shadow-sm border-0 telemetry-card h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-cpu-fill text-info me-2"></i>CPU Processing Metrics
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Big CPU Meter -->
+                <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded-3 border mb-3">
+                    <div>
+                        <div class="text-muted small fw-semibold text-uppercase">Overall CPU Load</div>
+                        <div class="metric-value-large text-primary" id="cpuOverallText">
+                            {{ stats.cpu.overall_usage_pct }}%
+                        </div>
+                        <div class="small text-secondary">
+                            Load Avg: <code id="cpuLoad">{{ stats.cpu.load_averages['1m'] }}, {{ stats.cpu.load_averages['5m'] }}, {{ stats.cpu.load_averages['15m'] }}</code>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <div class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2 fs-6 mb-1">
+                            <i class="bi bi-thermometer-half me-1"></i><span id="cpuTemp">{{ stats.cpu.temperature_c }}</span>°C
+                        </div>
+                        <div class="small text-muted font-monospace"><span id="cpuFreq">{{ stats.cpu.frequency_ghz }}</span> GHz Clock</div>
+                    </div>
+                </div>
+
+                <!-- Per-Core Utilization Breakdown -->
+                <h6 class="fw-bold small text-uppercase text-secondary mb-2">Core Allocation (4 Logical Threads)</h6>
+                <div id="coresContainer">
+                    {% for core in stats.cpu.cores %}
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="font-monospace text-secondary">Core #{{ core.core_id }}</span>
+                            <span class="fw-bold font-monospace" id="coreVal{{ core.core_id }}">{{ core.usage }}%</span>
+                        </div>
+                        <div class="progress cpu-core-bar bg-light border">
+                            <div class="progress-bar {% if core.usage > 70 %}bg-danger{% elif core.usage > 40 %}bg-warning{% else %}bg-info{% endif %}" 
+                                 id="coreBar{{ core.core_id }}" 
+                                 role="progressbar" 
+                                 style="width: {{ core.usage }}%;"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- RAM and Disk Progress Bars -->
+                <div class="border-top pt-3 mt-3">
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="text-secondary"><i class="bi bi-memory me-1"></i>System Memory (RAM)</span>
+                            <span class="fw-bold" id="ramText">{{ stats.memory.used_gb }} GB / {{ stats.memory.total_gb }} GB ({{ stats.memory.usage_pct }}%)</span>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-primary" id="ramBar" style="width: {{ stats.memory.usage_pct }}%;"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="text-secondary"><i class="bi bi-hdd me-1"></i>Disk Volume Storage</span>
+                            <span class="fw-bold" id="diskText">{{ stats.disk.used_gb }} GB / {{ stats.disk.total_gb }} GB ({{ stats.disk.usage_pct }}%)</span>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-secondary" id="diskBar" style="width: {{ stats.disk.usage_pct }}%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Rolling Real-Time CPU History Chart -->
+    <div class="col-12 col-lg-7">
+        <div class="card shadow-sm border-0 telemetry-card h-100">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-activity text-primary me-2"></i>Live CPU &amp; Query Telemetry Waveform
+                </h5>
+                <span class="badge bg-light text-dark border font-monospace small" id="lastPollTime">Updated: {{ stats.timestamp }}</span>
+            </div>
+            <div class="card-body">
+                <div style="height: 320px; position: relative;">
+                    <canvas id="liveCpuChart"></canvas>
+                </div>
+            </div>
+            <div class="card-footer bg-white border-top small text-muted d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-info-circle me-1"></i>Graph updates asynchronously via <code>/api/system-stats</code> without page refresh.</span>
+                <a href="{{ url_for('api_system_stats') }}" target="_blank" class="btn btn-sm btn-link p-0 text-decoration-none">
+                    Raw JSON Feed <i class="bi bi-box-arrow-up-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Live Rolling Data Buffers for Chart.js
+    const maxDataPoints = 15;
+    const initialTime = "{{ stats.timestamp }}";
+    const initialCpu = {{ stats.cpu.overall_usage_pct }};
+    const initialQps = {{ stats.database.telemetry.qps }};
+
+    const labels = [initialTime];
+    const cpuData = [initialCpu];
+    const qpsData = [initialQps];
+
+    // Initialize Chart.js Waveform
+    const ctx = document.getElementById('liveCpuChart').getContext('2d');
+    const liveChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'CPU Usage (%)',
+                    data: cpuData,
+                    borderColor: '#0dcaf0',
+                    backgroundColor: 'rgba(13, 202, 240, 0.15)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2.5,
+                    yAxisID: 'yCpu',
+                },
+                {
+                    label: 'Queries Per Sec (QPS)',
+                    data: qpsData,
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.05)',
+                    borderDash: [3, 3],
+                    tension: 0.3,
+                    borderWidth: 2,
+                    yAxisID: 'yQps',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 400 },
+            scales: {
+                yCpu: {
+                    type: 'linear',
+                    position: 'left',
+                    min: 0,
+                    max: 100,
+                    ticks: {
+                        callback: function(v) { return v + '%'; }
+                    },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                yQps: {
+                    type: 'linear',
+                    position: 'right',
+                    min: 200,
+                    max: 600,
+                    grid: { drawOnChartArea: false },
+                    ticks: {
+                        callback: function(v) { return v + ' qps'; }
+                    }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { position: 'top' }
+            }
+        }
+    });
+
+    // Function to poll /api/system-stats and update UI elements dynamically
+    async function fetchLiveStats() {
+        try {
+            const res = await fetch("{{ url_for('api_system_stats') }}");
+            if (!res.ok) return;
+            const data = await res.json();
+
+            // 1. Update CPU overall & temperature
+            document.getElementById('cpuOverallText').innerText = data.cpu.overall_usage_pct + '%';
+            document.getElementById('cpuTemp').innerText = data.cpu.temperature_c;
+            document.getElementById('cpuFreq').innerText = data.cpu.frequency_ghz;
+            document.getElementById('cpuLoad').innerText = 
+                `${data.cpu.load_averages['1m']}, ${data.cpu.load_averages['5m']}, ${data.cpu.load_averages['15m']}`;
+
+            // 2. Update Cores
+            data.cpu.cores.forEach(c => {
+                const valElem = document.getElementById(`coreVal${c.core_id}`);
+                const barElem = document.getElementById(`coreBar${c.core_id}`);
+                if (valElem && barElem) {
+                    valElem.innerText = c.usage + '%';
+                    barElem.style.width = c.usage + '%';
+                    barElem.className = 'progress-bar ' + (c.usage > 70 ? 'bg-danger' : c.usage > 40 ? 'bg-warning' : 'bg-info');
+                }
+            });
+
+            // 3. Update Memory & Disk
+            document.getElementById('ramText').innerText = 
+                `${data.memory.used_gb} GB / ${data.memory.total_gb} GB (${data.memory.usage_pct}%)`;
+            document.getElementById('ramBar').style.width = data.memory.usage_pct + '%';
+
+            // 4. Update Database Metrics
+            document.getElementById('dbLatency').innerText = data.database.connection.latency_ms + ' ms';
+            document.getElementById('dbQps').innerHTML = `${data.database.telemetry.qps} <span class="fs-6 fw-normal text-muted">QPS</span>`;
+            document.getElementById('dbCacheHit').innerText = data.database.telemetry.cache_hit_ratio + '%';
+            document.getElementById('dbConnCount').innerHTML = 
+                `${data.database.telemetry.active_connections} <span class="fs-6 fw-normal text-muted">/ ${data.database.telemetry.max_connections}</span>`;
+            document.getElementById('dbConnPct').innerText = data.database.telemetry.connection_pool_usage_pct + '%';
+            document.getElementById('dbFileSize').innerHTML = `${data.database.size_kb} <span class="fs-6 fw-normal text-muted">KB</span>`;
+            document.getElementById('dbTotalRecords').innerText = data.database.total_records;
+
+            // 5. Update Table record counts
+            document.getElementById('cntUsers').innerText = data.database.tables.users;
+            document.getElementById('cntOrders').innerText = data.database.tables.orders;
+            document.getElementById('cntProducts').innerText = data.database.tables.products;
+            document.getElementById('cntTrends').innerText = data.database.tables.revenue_trends;
+            document.getElementById('lastPollTime').innerText = 'Updated: ' + data.timestamp;
+
+            // 6. Update Rolling Chart
+            if (labels.length >= maxDataPoints) {
+                labels.shift();
+                cpuData.shift();
+                qpsData.shift();
+            }
+            labels.push(data.timestamp);
+            cpuData.push(data.cpu.overall_usage_pct);
+            qpsData.push(data.database.telemetry.qps);
+            liveChart.update();
+
+        } catch (err) {
+            console.error('Error fetching live telemetry:', err);
+        }
+    }
+
+    // Ping / test database connection directly
+    async function testConnection() {
+        try {
+            const res = await fetch("{{ url_for('database_test') }}");
+            const data = await res.json();
+            alert(`Database Connection Test:\nStatus: ${data.status.toUpperCase()}\nEngine: ${data.database_type}\nLatency: ${data.latency_ms} ms\nTables: ${data.table_count}`);
+        } catch (e) {
+            alert('Failed to ping database: ' + e);
+        }
+    }
+
+    // Auto-polling interval timer
+    let pollInterval = setInterval(fetchLiveStats, 3000);
+
+    const toggle = document.getElementById('autoRefreshToggle');
+    toggle.addEventListener('change', function() {
+        if (this.checked) {
+            pollInterval = setInterval(fetchLiveStats, 3000);
+        } else {
+            clearInterval(pollInterval);
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,109 @@
+
+---
+# ==============================================================================
+# Ansible Variables for Nexus Commerce Dashboard
+#
+# Sensitive credentials are maintained in:
+#   group_vars/vault.yml
+#
+# Run using:
+#   ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass
+# ==============================================================================
+
+# ==============================================================================
+# Application Branding & Configuration
+# ==============================================================================
+
+app_name: "Nexus Commerce Dashboard"
+app_env: "production"
+app_debug: false
+app_port: 5000
+
+# Application security - credentials from vault.yml
+secret_key: "{{ vault_secret_key }}"
+
+# ==============================================================================
+# Default Administrator Account
+# ==============================================================================
+
+admin_username: "{{ vault_admin_username }}"
+admin_password: "{{ vault_admin_password }}"
+
+# ==============================================================================
+# Database Configuration
+# ==============================================================================
+
+# Supported: sqlite, mysql, postgresql
+db_type: "mysql"
+
+db_name: "mira"
+db_host: "127.0.0.1"
+db_port: 3306
+
+# Credentials from vault.yml
+db_user: "{{ vault_db_user }}"
+db_password: "{{ vault_db_password }}"
+
+# Database server provisioning
+database_server: "mariadb"
+manage_mysql: true
+create_database: true
+
+# Database server configuration
+database_bind_address: "127.0.0.1"
+db_user_host: "127.0.0.1"
+
+# MySQL / MariaDB root credentials
+mysql_root_username: "{{ vault_mysql_root_username }}"
+mysql_root_password: "{{ vault_mysql_root_password }}"
+
+# These can be overridden based on the target distribution
+mysql_service_name: ""
+mysql_socket: ""
+
+# ==============================================================================
+# Target Host & Application Deployment
+# ==============================================================================
+
+app_dir: "/var/www/html/mira"
+
+python_executable: "python3"
+app_user: "{{ ansible_user_id }}"
+app_group: "{{ ansible_user_id }}"
+
+deploy_application: true
+manage_python: true
+
+# ==============================================================================
+# Python Application Configuration
+# ==============================================================================
+
+# Flask WSGI entry point
+wsgi_module: "app:app"
+
+gunicorn_workers: 3
+
+# ==============================================================================
+# Systemd Service Configuration
+# ==============================================================================
+
+manage_systemd_service: true
+systemd_service_name: "ecommerce-dashboard"
+
+# ==============================================================================
+# Nginx Reverse Proxy Configuration
+# ==============================================================================
+
+manage_nginx: true
+
+nginx_port: 80
+nginx_server_name: "_"
+nginx_site_config_name: "ecommerce-dashboard"
+nginx_client_max_body_size: "50M"
+
+# ==============================================================================
+# Application Initialization & Validation
+# ==============================================================================
+
+run_db_init: false
+run_health_check: true
