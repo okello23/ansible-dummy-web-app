@@ -58,7 +58,7 @@
         mysql_server_packages: >-
           {{ ['mysql-server', 'mysql-client', 'python3-pymysql']
              if ansible_os_family == 'Debian'
-             else ['community-mysql-server', 'community-mysql', 'python3-PyMySQL'] }}
+             else ['mysql-server', 'mysql', 'python3-PyMySQL'] }}
         mysql_service_name: "{{ 'mysql' if ansible_os_family == 'Debian' else 'mysqld' }}"
 
     - name: Refresh APT package index on Debian-family systems
