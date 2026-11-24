@@ -55,11 +55,13 @@ db_user_host: "127.0.0.1"
 
 # MySQL / MariaDB root credentials
 mysql_root_username: "{{ vault_mysql_root_username }}"
-mysql_root_password: "{{ vault_mysql_root_password }}"
+
+# We are going to use socket connection
+# mysql_root_password:
 
 # These can be overridden based on the target distribution
 mysql_service_name: ""
-mysql_socket: ""
+mysql_socket: "{{ '/var/lib/mysql/mysql.sock' if ansible_os_family == 'RedHat' else '/var/run/mysqld/mysqld.sock' }}"
 
 # ==============================================================================
 # Target Host & Application Deployment
@@ -105,5 +107,5 @@ nginx_client_max_body_size: "50M"
 # Application Initialization & Validation
 # ==============================================================================
 
-run_db_init: false
+run_db_init: true
 run_health_check: true
