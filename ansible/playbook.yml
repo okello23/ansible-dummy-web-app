@@ -141,6 +141,7 @@
         - manage_systemd_service | default(false) | bool
         - not systemd_runtime.stat.exists
 
+
     # ========================================================================
     # Nginx Configuration
     # ========================================================================
@@ -155,26 +156,42 @@
             name: nginx
             state: present
 
-        - name: Detect Nginx configuration layout
+        - name: Detect Debian-style Nginx configuration layout
           ansible.builtin.stat:
             path: /etc/nginx/sites-available
           register: nginx_sites_available
 
+        - name: Set Nginx configuration paths
+          ansible.builtin.set_fact:
+            nginx_config_dir: >-
+              {{ '/etc/nginx/sites-available'
+                 if nginx_sites_available.stat.exists
+                 else '/etc/nginx/conf.d' }}
+            nginx_config_dest: >-
+              {{ '/etc/nginx/sites-available/' ~ nginx_site_config_name
+                 if nginx_sites_available.stat.exists
+                 else '/etc/nginx/conf.d/' ~ nginx_site_config_name ~ '.conf' }}
+
+        - name: Ensure Nginx configuration directory exists
+          ansible.builtin.file:
+            path: "{{ nginx_config_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+
         - name: Deploy Nginx virtual host configuration
           ansible.builtin.template:
             src: templates/nginx.conf.j2
-            dest: >-
-              {% if nginx_sites_available.stat.exists %}
-              /etc/nginx/sites-available/{{ nginx_site_config_name }}
-              {% else %}
-              /etc/nginx/conf.d/{{ nginx_site_config_name }}.conf
-              {% endif %}
+            dest: "{{ nginx_config_dest }}"
+            owner: root
+            group: root
             mode: '0644'
           notify: Reload Nginx
 
-        - name: Enable Nginx site configuration
+        - name: Enable Nginx site configuration on Debian-style systems
           ansible.builtin.file:
-            src: "/etc/nginx/sites-available/{{ nginx_site_config_name }}"
+            src: "{{ nginx_config_dest }}"
             dest: "/etc/nginx/sites-enabled/{{ nginx_site_config_name }}"
             state: link
           when: nginx_sites_available.stat.exists
@@ -199,8 +216,11 @@
 
         - name: Report Nginx configuration in container
           ansible.builtin.debug:
-            msg: "Nginx configuration installed and validated. Start Nginx manually in this container."
+            msg: >-
+              Nginx configuration installed and validated.
+              Systemd is unavailable, so start Nginx manually.
           when: not systemd_runtime.stat.exists
+
 
     # ========================================================================
     # Application Health Check
