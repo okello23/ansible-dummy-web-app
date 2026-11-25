@@ -77,6 +77,12 @@
         name: "{{ python_system_packages }}"
         state: present
 
+    - name: Ensure Git is installed
+      become: true
+      ansible.builtin.package:
+        name: git
+        state: present
+
     - name: Ensure Nginx is installed when enabled
       become: true
       ansible.builtin.package:
