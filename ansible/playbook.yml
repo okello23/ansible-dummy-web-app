@@ -1,4 +1,3 @@
-
 ---
 - name: Deploy and Configure Python Dashboard Web Application
   hosts: webservers
@@ -143,6 +142,13 @@
         path: "{{ app_dir }}"
         state: directory
         mode: '0755'
+
+    - name: Clone the repository, when not deploying locally
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        version: "{{ repo_version }}"
+        dest: "{{ app_dir }}"
+        accept_newhostkey: true
 
     # ========================================================================
     # Environment Configuration
@@ -375,13 +381,9 @@
         name: "{{ systemd_service_name }}"
         state: restarted
       become: true
-      when:
-        - manage_systemd_service | default(false) | bool
-        - systemd_runtime.stat.exists | default(false)
 
     - name: Reload Nginx
       ansible.builtin.service:
         name: nginx
         state: reloaded
       become: true
-      when: systemd_runtime.stat.exists | default(false)
